@@ -19,10 +19,11 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
-import com.vluk4.example.parallax.model.ContainerSettings
+import com.vluk4.example.parallax.model.ContentSettings
 import com.vluk4.example.parallax.model.ParallaxOrientation
 import com.vluk4.example.parallax.model.SensorData
 import com.vluk4.example.parallax.sensor.SensorDataManager
+import com.vluk4.parallax.model.Content
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.receiveAsFlow
@@ -33,12 +34,9 @@ private const val INITIAL_VERTICAL_OFFSET = 0.5f
 @Composable
 fun ParallaxView(
     modifier: Modifier = Modifier,
-    backgroundContent: @Composable (() -> Unit)? = null,
-    middleContent: @Composable (() -> Unit)? = null,
-    foregroundContent: @Composable (() -> Unit)? = null,
-    backgroundContainerSettings: ContainerSettings = ContainerSettings(),
-    middleContainerSettings: ContainerSettings = ContainerSettings(),
-    foregroundContainerSettings: ContainerSettings = ContainerSettings(),
+    backgroundContent: Content = Content(),
+    middleContent: Content = Content(),
+    foregroundContent: Content = Content(),
     movementIntensityMultiplier: Int = 20,
     verticalOffsetLimit: Float = 0.5f,
     horizontalOffsetLimit: Float = 0.5f,
@@ -56,15 +54,9 @@ fun ParallaxView(
         foregroundContent = foregroundContent,
         modifier = modifier,
         depthMultiplier = movementIntensityMultiplier,
-        backgroundScaleMultiplier = backgroundContainerSettings.scale,
-        middleScaleMultiplier = middleContainerSettings.scale,
-        foregroundScaleMultiplier = foregroundContainerSettings.scale,
         orientation = orientation,
         horizontalLimit = horizontalOffsetLimit,
         verticalLimit = verticalOffsetLimit,
-        backgroundAlignment = backgroundContainerSettings.alignment,
-        middleAlignment = middleContainerSettings.alignment,
-        foregroundAlignment = foregroundContainerSettings.alignment
     )
 }
 
@@ -72,20 +64,21 @@ fun ParallaxView(
 private fun ParallaxViewContent(
     data: SensorData,
     modifier: Modifier,
-    backgroundContent: @Composable (() -> Unit)?,
-    middleContent: @Composable (() -> Unit)?,
-    foregroundContent: @Composable (() -> Unit)?,
-    backgroundAlignment: Alignment,
-    middleAlignment: Alignment,
-    foregroundAlignment: Alignment,
-    backgroundScaleMultiplier: Float,
-    middleScaleMultiplier: Float,
-    foregroundScaleMultiplier: Float,
+    backgroundContent: Content = Content(),
+    middleContent: Content = Content(),
+    foregroundContent: Content = Content(),
     depthMultiplier: Int,
     horizontalLimit: Float,
     verticalLimit: Float,
     orientation: ParallaxOrientation,
 ) {
+    val backgroundAlignment: Alignment = backgroundContent.settings.alignment
+    val middleAlignment: Alignment = middleContent.settings.alignment
+    val foregroundAlignment: Alignment = foregroundContent.settings.alignment
+    val backgroundScaleMultiplier: Float = backgroundContent.settings.scale
+    val middleScaleMultiplier: Float = middleContent.settings.scale
+    val foregroundScaleMultiplier: Float = foregroundContent.settings.scale
+
     var roll = data.roll.coerceIn(getRange(horizontalLimit)).times(depthMultiplier)
     var pitch = data.pitch.coerceIn(getRange(verticalLimit)).plus(INITIAL_VERTICAL_OFFSET)
         .times(depthMultiplier)
@@ -108,7 +101,7 @@ private fun ParallaxViewContent(
                         )
                     }
                     .align(backgroundAlignment),
-                content = { background() }
+                content = { background.composableContentOrNothing() }
             )
 
             middleContent?.let { middle ->
@@ -116,7 +109,7 @@ private fun ParallaxViewContent(
                     modifier = Modifier
                         .scale(middleScaleMultiplier)
                         .align(middleAlignment),
-                    content = { middle() }
+                    content = { middle.composableContentOrNothing() }
                 )
             }
 
@@ -131,7 +124,7 @@ private fun ParallaxViewContent(
                             )
                         }
                         .align(foregroundAlignment),
-                    content = { foreground() }
+                    content = { foreground.composableContentOrNothing() }
                 )
             }
         }
@@ -144,7 +137,7 @@ private fun getRange(value: Float): ClosedFloatingPointRange<Float> {
 }
 
 @Composable
-private fun getSensorData(context: Context, configuration: Configuration): SensorData {
+private fun getSensorData(context: Context, configuration: Configuration) : SensorData {
     val scope = rememberCoroutineScope()
     var data by remember { mutableStateOf(SensorData()) }
     val deviceOrientation = configuration.orientation
@@ -156,7 +149,11 @@ private fun getSensorData(context: Context, configuration: Configuration): Senso
         val job = scope.launch {
             dataManager.data
                 .receiveAsFlow()
-                .onEach { data = it }
+                .onEach {
+                    if(it!=data){ //avoids flickering
+                        data = it
+                    }
+                }
                 .collect()
         }
 
